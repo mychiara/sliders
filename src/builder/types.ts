@@ -63,7 +63,7 @@ export interface SlideData {
   btnText?: string;
   btnLink?: string;
   // Contextual visual widgets
-  visualType?: 'none' | 'finance' | 'anatomy' | 'globe';
+  visualType?: 'none' | 'finance' | 'anatomy' | 'tech' | 'globe';
 }
 
 export interface ThemePreset {

@@ -345,6 +345,8 @@ export default function BuilderModal({
                           <option value="none">Tidak Ada (Layout Standar)</option>
                           <option value="finance">📈 Keuangan: Live Chart & Simulasi Omzet</option>
                           <option value="anatomy">🫀 Anatomi: Jantung Berdenyut & EKG Monitor</option>
+                          <option value="tech">🤖 AI & Komputasi: Jaringan Neural & Telemetri</option>
+                          <option value="globe">🌐 Global: Bola Dunia 3D Berputar (Globe)</option>
                         </select>
                       </div>
                     </div>

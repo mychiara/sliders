@@ -9,6 +9,8 @@ import Steps from '../components/Steps';
 import Quote from '../components/Quote';
 import FinanceVisual from '../components/FinanceVisual';
 import AnatomyVisual from '../components/AnatomyVisual';
+import TechVisual from '../components/TechVisual';
+import Globe from '../components/Globe';
 import { SlideData } from './types';
 
 export function renderSlide(s: SlideData, index: number) {
@@ -27,6 +29,40 @@ export function renderSlide(s: SlideData, index: number) {
     return (
       <Slide key={key} center nav={s.nav || 'Anatomi'} notes={s.notes}>
         <AnatomyVisual title={s.title} />
+      </Slide>
+    );
+  }
+
+  if (s.visualType === 'tech') {
+    return (
+      <Slide key={key} center nav={s.nav || 'Teknologi'} notes={s.notes}>
+        <TechVisual title={s.title} />
+      </Slide>
+    );
+  }
+
+  if (s.visualType === 'globe') {
+    return (
+      <Slide key={key} full nav={s.nav || 'Global'} notes={s.notes}>
+        <div style={{ position: 'absolute', top: 32, left: '50%', transform: 'translateX(-50%)', zIndex: 10, textAlign: 'center', pointerEvents: 'none' }}>
+          {s.kicker && <div className="kicker" style={{ marginBottom: 6 }}>{s.kicker}</div>}
+          <h2 className="headline" style={{ fontSize: 26, margin: 0 }}>{s.title}</h2>
+        </div>
+        <Globe
+          markers={[
+            { lat: -6.2088, lng: 106.8456, label: 'Jakarta', value: 'HQ Hub' },
+            { lat: 1.3521, lng: 103.8198, label: 'Singapore', value: 'Data Center' },
+            { lat: 35.6762, lng: 139.6503, label: 'Tokyo', value: 'Edge Node' },
+            { lat: 37.7749, lng: -122.4194, label: 'San Francisco', value: 'Partner' },
+            { lat: 51.5074, lng: -0.1278, label: 'London', value: 'Gateway' },
+          ]}
+          arcs={[
+            { from: [-6.2088, 106.8456], to: [1.3521, 103.8198] },
+            { from: [1.3521, 103.8198], to: [35.6762, 139.6503] },
+            { from: [35.6762, 139.6503], to: [37.7749, -122.4194] },
+            { from: [37.7749, -122.4194], to: [51.5074, -0.1278] },
+          ]}
+        />
       </Slide>
     );
   }
