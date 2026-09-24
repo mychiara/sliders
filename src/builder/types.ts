@@ -62,6 +62,8 @@ export interface SlideData {
   // For closing / statement
   btnText?: string;
   btnLink?: string;
+  // Contextual visual widgets
+  visualType?: 'none' | 'finance' | 'anatomy' | 'globe';
 }
 
 export interface ThemePreset {

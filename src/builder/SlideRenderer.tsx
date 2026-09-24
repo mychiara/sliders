@@ -7,10 +7,29 @@ import Bento from '../components/Bento';
 import Timeline from '../components/Timeline';
 import Steps from '../components/Steps';
 import Quote from '../components/Quote';
+import FinanceVisual from '../components/FinanceVisual';
+import AnatomyVisual from '../components/AnatomyVisual';
 import { SlideData } from './types';
 
 export function renderSlide(s: SlideData, index: number) {
   const key = s.id || `slide-${index}`;
+
+  // Dedicated contextual animation widgets
+  if (s.visualType === 'finance') {
+    return (
+      <Slide key={key} center nav={s.nav || 'Keuangan'} notes={s.notes}>
+        <FinanceVisual title={s.title} />
+      </Slide>
+    );
+  }
+
+  if (s.visualType === 'anatomy') {
+    return (
+      <Slide key={key} center nav={s.nav || 'Anatomi'} notes={s.notes}>
+        <AnatomyVisual title={s.title} />
+      </Slide>
+    );
+  }
 
   switch (s.type) {
     case 'cover':

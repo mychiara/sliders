@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { SlideData, SlideType, ThemePreset } from './types';
+import { SlideData, SlideType } from './types';
 import { THEME_PRESETS, DEFAULT_SLIDES } from './defaultSlides';
+import { generateDeckFromTitle } from './generator';
 
 interface BuilderModalProps {
   slides: SlideData[];
@@ -19,9 +20,10 @@ export default function BuilderModal({
   onClose,
   showToast,
 }: BuilderModalProps) {
-  const [activeTab, setActiveTab] = useState<'slides' | 'theme' | 'quick' | 'share'>('slides');
+  const [activeTab, setActiveTab] = useState<'generate' | 'slides' | 'theme' | 'quick' | 'share'>('generate');
   const [selectedIdx, setSelectedIdx] = useState<number>(0);
   const [quickText, setQuickText] = useState<string>('');
+  const [promptTitle, setPromptTitle] = useState<string>('');
 
   const currentSlide = slides[selectedIdx] || slides[0];
 
@@ -63,6 +65,21 @@ export default function BuilderModal({
     updated.splice(to, 0, moved);
     onChangeSlides(updated);
     setSelectedIdx(to);
+  };
+
+  const handleAutoGenerate = (inputTopic?: string) => {
+    const targetTitle = inputTopic || promptTitle;
+    if (!targetTitle.trim()) {
+      showToast('Ketik judul presentasi terlebih dahulu!');
+      return;
+    }
+
+    const result = generateDeckFromTitle(targetTitle);
+    onChangeSlides(result.slides);
+    onChangeTheme(result.theme);
+    setSelectedIdx(0);
+    showToast(`✨ Sukses! 7 slide untuk "${targetTitle}" berhasil dibuat lengkap dengan animasi.`);
+    setActiveTab('slides');
   };
 
   const handleCopyShareLink = () => {
@@ -107,74 +124,6 @@ export default function BuilderModal({
     reader.readAsText(file);
   };
 
-  const handleQuickGenerate = () => {
-    if (!quickText.trim()) {
-      showToast('Silakan tempel teks catatan Anda terlebih dahulu.');
-      return;
-    }
-
-    const lines = quickText.split('\n').map(l => l.trim()).filter(Boolean);
-    const newSlides: SlideData[] = [];
-
-    let cur: Partial<SlideData> | null = null;
-
-    lines.forEach((line, i) => {
-      if (line.startsWith('# ') || line.startsWith('Slide')) {
-        if (cur && cur.title) {
-          newSlides.push({
-            id: `quick-${Date.now()}-${newSlides.length}`,
-            type: cur.type || 'statement',
-            title: cur.title,
-            subtitle: cur.subtitle || '',
-            items: cur.items,
-            nav: cur.title.slice(0, 15),
-          });
-        }
-        cur = {
-          type: newSlides.length === 0 ? 'cover' : 'statement',
-          title: line.replace(/^#\s*|^Slide\s*\d*:\s*/i, ''),
-          items: [],
-        };
-      } else if (line.startsWith('- ') || line.startsWith('* ')) {
-        if (!cur) {
-          cur = { type: 'agenda', title: 'Poin Utama', items: [] };
-        }
-        cur.type = 'agenda';
-        cur.items = cur.items || [];
-        cur.items.push(line.replace(/^[-*]\s*/, ''));
-      } else {
-        if (!cur) {
-          cur = { type: 'cover', title: line, subtitle: '' };
-        } else if (!cur.subtitle) {
-          cur.subtitle = line;
-        } else {
-          cur.items = cur.items || [];
-          cur.items.push(line);
-        }
-      }
-    });
-
-    if (cur && cur.title) {
-      newSlides.push({
-        id: `quick-${Date.now()}-${newSlides.length}`,
-        type: cur.type || 'statement',
-        title: cur.title,
-        subtitle: cur.subtitle || '',
-        items: cur.items,
-        nav: cur.title.slice(0, 15),
-      });
-    }
-
-    if (newSlides.length > 0) {
-      onChangeSlides(newSlides);
-      setSelectedIdx(0);
-      setActiveTab('slides');
-      showToast(`✨ Berhasil mengubah teks menjadi ${newSlides.length} slide!`);
-    } else {
-      showToast('Gagal memproses teks.');
-    }
-  };
-
   return (
     <div className="builder-overlay" onClick={onClose}>
       <div className="builder-window" onClick={(e) => e.stopPropagation()}>
@@ -182,10 +131,21 @@ export default function BuilderModal({
         <div className="builder-header">
           <div className="builder-title">
             <span>⚡ Slide Studio</span>
-            <span className="builder-badge">No-Code Editor</span>
+            <span className="builder-badge">AI & No-Code</span>
           </div>
 
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <button
+              className={`sidebar-action-btn ${activeTab === 'generate' ? 'active' : ''}`}
+              style={{
+                background: activeTab === 'generate' ? 'var(--accent)' : undefined,
+                color: activeTab === 'generate' ? 'var(--accent-ink)' : undefined,
+                fontWeight: activeTab === 'generate' ? 600 : undefined,
+              }}
+              onClick={() => setActiveTab('generate')}
+            >
+              ✨ Buat dari Judul
+            </button>
             <button
               className={`sidebar-action-btn ${activeTab === 'slides' ? 'active' : ''}`}
               style={{ background: activeTab === 'slides' ? 'rgba(79, 229, 176, 0.15)' : undefined }}
@@ -199,13 +159,6 @@ export default function BuilderModal({
               onClick={() => setActiveTab('theme')}
             >
               🎨 Tema
-            </button>
-            <button
-              className={`sidebar-action-btn ${activeTab === 'quick' ? 'active' : ''}`}
-              style={{ background: activeTab === 'quick' ? 'rgba(79, 229, 176, 0.15)' : undefined }}
-              onClick={() => setActiveTab('quick')}
-            >
-              ⚡ Teks ke Slide
             </button>
             <button
               className={`sidebar-action-btn ${activeTab === 'share' ? 'active' : ''}`}
@@ -223,6 +176,82 @@ export default function BuilderModal({
 
         {/* Body */}
         <div className="builder-body">
+          {/* TAB 1: AUTO GENERATOR DARI JUDUL */}
+          {activeTab === 'generate' && (
+            <div className="builder-content" style={{ maxWidth: 760, margin: '0 auto' }}>
+              <div style={{ textAlign: 'center', marginBottom: 28 }}>
+                <span style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--primary)', fontWeight: 600 }}>
+                  Fitur Pembuat Otomatis
+                </span>
+                <h2 style={{ fontSize: 26, margin: '8px 0 10px', fontWeight: 700 }}>
+                  Generate Presentasi Lengkap dari 1 Judul
+                </h2>
+                <p style={{ color: '#94a3b8', fontSize: 14, margin: 0 }}>
+                  Cukup ketik judul presentasi Anda. Sistem akan otomatis mengisi materi seluruh slide, menyusun alur cerita, memilih tema warna, serta menyematkan animasi interaktif yang sesuai!
+                </p>
+              </div>
+
+              <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: 24, borderRadius: 16, border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                <label className="form-label" style={{ fontSize: 13 }}>Ketik Judul Presentasi Anda:</label>
+                <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    style={{ fontSize: 15, padding: '12px 16px' }}
+                    value={promptTitle}
+                    onChange={(e) => setPromptTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAutoGenerate();
+                    }}
+                    placeholder="Contoh: Manajemen Keuangan Perusahaan 2026 atau Anatomi Tubuh & Jantung..."
+                  />
+                  <button
+                    className="builder-pill-btn primary"
+                    style={{ whiteSpace: 'nowrap', padding: '12px 24px', fontSize: 14 }}
+                    onClick={() => handleAutoGenerate()}
+                  >
+                    🚀 Generate Slide
+                  </button>
+                </div>
+
+                <div>
+                  <span style={{ fontSize: 12, color: 'var(--fg-muted)', display: 'block', marginBottom: 10 }}>
+                    Atau coba salah satu contoh topik instan berikut:
+                  </span>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {[
+                      { label: '📈 Laporan Manajemen Keuangan 2026', title: 'Laporan Manajemen Keuangan Perusahaan 2026' },
+                      { label: '🫀 Anatomi Sistem Peredaran Darah & Jantung', title: 'Anatomi Sistem Peredaran Darah & Jantung Manusia' },
+                      { label: '🤖 Strategi Transformasi AI & Otomatisasi', title: 'Strategi Transformasi AI & Otomatisasi Masa Depan' },
+                      { label: '☕ Pitch Deck Bisnis Kedai Kopi Modern', title: 'Pitch Deck Bisnis Kedai Kopi Artisan Indonesia' },
+                    ].map((ex) => (
+                      <button
+                        key={ex.title}
+                        onClick={() => {
+                          setPromptTitle(ex.title);
+                          handleAutoGenerate(ex.title);
+                        }}
+                        style={{
+                          background: 'rgba(255, 255, 255, 0.05)',
+                          border: '1px solid rgba(255, 255, 255, 0.12)',
+                          color: '#e2e8f0',
+                          padding: '7px 14px',
+                          borderRadius: 999,
+                          fontSize: 12.5,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {ex.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: EDIT SLIDE PER SATUAN */}
           {activeTab === 'slides' && (
             <>
               {/* Sidebar list */}
@@ -237,7 +266,9 @@ export default function BuilderModal({
                       <span className="slide-num">{idx + 1}</span>
                       <div className="slide-meta">
                         <div className="slide-item-title">{s.title || '(Tanpa Judul)'}</div>
-                        <div className="slide-item-type">{s.type}</div>
+                        <div className="slide-item-type">
+                          {s.visualType && s.visualType !== 'none' ? `⚡ ${s.visualType}` : s.type}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -285,7 +316,7 @@ export default function BuilderModal({
 
                     <div className="form-row">
                       <div className="form-group">
-                        <label className="form-label">Tipe Slide</label>
+                        <label className="form-label">Tipe Layout</label>
                         <select
                           className="form-select"
                           value={currentSlide.type}
@@ -297,36 +328,40 @@ export default function BuilderModal({
                           <option value="bignumber">Angka Besar (Metrik)</option>
                           <option value="contrast">Perbandingan (Sebelum / Sesudah)</option>
                           <option value="bento">Fitur (Bento Grid)</option>
+                          <option value="steps">Langkah Pelaksanaan (Steps)</option>
                           <option value="timeline">Timeline / Roadmap</option>
                           <option value="closing">Penutup / Closing</option>
                         </select>
                       </div>
 
                       <div className="form-group">
-                        <label className="form-label">Label Navigasi (Thumbnail)</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          value={currentSlide.nav || ''}
-                          onChange={(e) => updateCurrentSlide({ nav: e.target.value })}
-                          placeholder="Misal: Pembuka, Solusi, Metrik"
-                        />
+                        <label className="form-label">Animasi / Widget Tematik Khusus</label>
+                        <select
+                          className="form-select"
+                          value={currentSlide.visualType || 'none'}
+                          onChange={(e) => updateCurrentSlide({ visualType: e.target.value as any })}
+                          style={{ borderColor: currentSlide.visualType && currentSlide.visualType !== 'none' ? 'var(--primary)' : undefined }}
+                        >
+                          <option value="none">Tidak Ada (Layout Standar)</option>
+                          <option value="finance">📈 Keuangan: Live Chart & Simulasi Omzet</option>
+                          <option value="anatomy">🫀 Anatomi: Jantung Berdenyut & EKG Monitor</option>
+                        </select>
                       </div>
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Kicker / Kategori (Teks Kecil di Atas)</label>
+                      <label className="form-label">Kicker / Kategori</label>
                       <input
                         type="text"
                         className="form-input"
                         value={currentSlide.kicker || ''}
                         onChange={(e) => updateCurrentSlide({ kicker: e.target.value })}
-                        placeholder="Contoh: Pitch Deck 2026, Masalah Utama"
+                        placeholder="Contoh: Evaluasi Kinerja, Anatomi Fisiologis..."
                       />
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">Judul Utama</label>
+                      <label className="form-label">Judul Slide</label>
                       <input
                         type="text"
                         className="form-input"
@@ -343,7 +378,7 @@ export default function BuilderModal({
                           className="form-textarea"
                           value={currentSlide.subtitle || ''}
                           onChange={(e) => updateCurrentSlide({ subtitle: e.target.value })}
-                          placeholder="Penjelasan ringkas..."
+                          placeholder="Penjelasan ringkas materi slide..."
                         />
                       </div>
                     )}
@@ -351,7 +386,7 @@ export default function BuilderModal({
                     {/* Khusus Agenda / Daftar Poin */}
                     {currentSlide.type === 'agenda' && (
                       <div className="form-group">
-                        <label className="form-label">Daftar Poin (Satu baris per poin)</label>
+                        <label className="form-label">Daftar Poin Agenda (Satu baris per poin)</label>
                         <textarea
                           className="form-textarea"
                           rows={4}
@@ -372,7 +407,7 @@ export default function BuilderModal({
                             className="form-input"
                             value={currentSlide.value || ''}
                             onChange={(e) => updateCurrentSlide({ value: e.target.value })}
-                            placeholder="Contoh: 85%, 10M+, 3.5x"
+                            placeholder="Contoh: +38.4%, 7.500 L, 100K+"
                           />
                         </div>
                         <div className="form-group">
@@ -382,7 +417,7 @@ export default function BuilderModal({
                             className="form-input"
                             value={currentSlide.label || ''}
                             onChange={(e) => updateCurrentSlide({ label: e.target.value })}
-                            placeholder="Contoh: Peningkatan efisiensi kerja"
+                            placeholder="Contoh: Pertumbuhan laba bersih tahun ini"
                           />
                         </div>
                       </div>
@@ -399,13 +434,13 @@ export default function BuilderModal({
                             style={{ marginBottom: 8 }}
                             value={currentSlide.leftTitle || ''}
                             onChange={(e) => updateCurrentSlide({ leftTitle: e.target.value })}
-                            placeholder="Judul Kiri (Misal: Slide Statis)"
+                            placeholder="Judul Kiri"
                           />
                           <textarea
                             className="form-textarea"
                             value={(currentSlide.leftItems || []).join('\n')}
                             onChange={(e) => updateCurrentSlide({ leftItems: e.target.value.split('\n').filter(Boolean) })}
-                            placeholder="Poin kekurangan (satu baris per poin)..."
+                            placeholder="Poin kekurangan..."
                           />
                         </div>
 
@@ -417,20 +452,20 @@ export default function BuilderModal({
                             style={{ marginBottom: 8 }}
                             value={currentSlide.rightTitle || ''}
                             onChange={(e) => updateCurrentSlide({ rightTitle: e.target.value })}
-                            placeholder="Judul Kanan (Misal: Web Interaktif)"
+                            placeholder="Judul Kanan"
                           />
                           <textarea
                             className="form-textarea"
                             value={(currentSlide.rightItems || []).join('\n')}
                             onChange={(e) => updateCurrentSlide({ rightItems: e.target.value.split('\n').filter(Boolean) })}
-                            placeholder="Poin keunggulan (satu baris per poin)..."
+                            placeholder="Poin keunggulan..."
                           />
                         </div>
                       </div>
                     )}
 
                     <div className="form-group">
-                      <label className="form-label">Catatan Presenter (Hanya terlihat saat tekan 'P')</label>
+                      <label className="form-label">Catatan Presenter (Buka dengan tombol 'P')</label>
                       <textarea
                         className="form-textarea"
                         style={{ minHeight: 60 }}
@@ -445,6 +480,7 @@ export default function BuilderModal({
             </>
           )}
 
+          {/* TAB 3: TEMA */}
           {activeTab === 'theme' && (
             <div className="builder-content">
               <h3 style={{ marginTop: 0 }}>Pilih Tema & Palet Warna</h3>
@@ -473,29 +509,7 @@ export default function BuilderModal({
             </div>
           )}
 
-          {activeTab === 'quick' && (
-            <div className="builder-content">
-              <h3 style={{ marginTop: 0 }}>Generator Teks ke Slide Otomatis</h3>
-              <p style={{ color: '#94a3b8', fontSize: 14 }}>
-                Punya catatan atau outline materi? Cukup tempel di bawah ini dan sistem akan mengubahnya menjadi slide berurutan secara otomatis!
-              </p>
-
-              <div className="form-group">
-                <textarea
-                  className="form-textarea"
-                  style={{ minHeight: 220, fontFamily: 'monospace', fontSize: 13 }}
-                  value={quickText}
-                  onChange={(e) => setQuickText(e.target.value)}
-                  placeholder={`Contoh format:\n# Slide 1: Peluncuran Produk\nKopi artisan lokal rasa premium\n\n# Slide 2: Keunggulan Kami\n- Biji kopi 100% Arabika lokal\n- Kemasan biodegradable ramah lingkungan\n- Pengiriman cepat di hari yang sama\n\n# Slide 3: Penutup\nHubungi tim kami untuk kemitraan!`}
-                />
-              </div>
-
-              <button className="builder-pill-btn primary" onClick={handleQuickGenerate}>
-                ✨ Ubah Menjadi Slide Sekarang
-              </button>
-            </div>
-          )}
-
+          {/* TAB 4: BAGIKAN */}
           {activeTab === 'share' && (
             <div className="builder-content">
               <h3 style={{ marginTop: 0 }}>Simpan & Bagikan Presentasi</h3>
@@ -547,7 +561,7 @@ export default function BuilderModal({
             Total {slides.length} slide · Perubahan tersimpan otomatis
           </span>
           <button className="builder-pill-btn primary" onClick={onClose}>
-            ▶️ Mulai Presentasi
+            ▶️ Tampilkan Slide
           </button>
         </div>
       </div>
